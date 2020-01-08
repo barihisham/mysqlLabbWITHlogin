@@ -43,9 +43,10 @@ public class AddBookDialog extends Dialog<Book> {
     private final ComboBox<BookGenre> genreChoice = new ComboBox(FXCollections.observableArrayList(BookGenre.values()));
     //private final Controller controller;
     private final AddAuthorDialog authorDialog;
-
-    public AddBookDialog(Controller controller) 
+    private final BooksDb booksDb;
+    public AddBookDialog(BooksDb booksDb )
     {
+        this.booksDb = booksDb;
         authorDialog = new AddAuthorDialog();
         buildAddBookDialog();
         //this.controller = controller;
@@ -128,7 +129,7 @@ public class AddBookDialog extends Dialog<Book> {
                         System.out.println("DATEPICKER" + datePublished.getValue());
                         Author author = new Author(Integer.parseInt(authorIdField.getText()), firstNameField.getText(), lastNameField.getText(), Date.valueOf(dobPicker.getValue()));
                         result = new Book(isbnField.getText(), titleField.getText(), Date.valueOf(datePublished.getValue()), genreChoice.getValue(),Integer.parseInt(ratingField.getText())
-                        , author);
+                        , author, booksDb.getCurrentUser());
                         if(authors.size() > 0)
                         {
                             result.addAuthors(authors);
@@ -213,11 +214,6 @@ public class AddBookDialog extends Dialog<Book> {
         
         
         return true;
-    }
-    
-    private void validateDate()
-    {
-        
     }
     
     

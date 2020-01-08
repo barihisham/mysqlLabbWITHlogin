@@ -18,7 +18,9 @@ public class Book {
     private BookGenre genre;
     private int rating; // should check 1-5
     private ArrayList<Author> authors;
-    // TODO: 
+    private User addedBy;
+    private ArrayList<Review> reviews;
+    // TODO:
     // Add authors, and corresponding methods, to your implementation 
     // as well, i.e. "private ArrayList<Author> authors;"
     
@@ -29,18 +31,19 @@ public class Book {
             throw new IllegalArgumentException("ISBN must be 13 digits && rating must be 1-5");
         }
         authors = new ArrayList<>();
+        reviews = new ArrayList<>();
         this.ISBN = ISBN;
         this.title = title;
         this.published = published;
         this.genre = genre;
         this.rating = rating;
-        //this.authors.add(author);
     }
     
-    public Book(String ISBN, String title, Date published, BookGenre genre, int rating, Author author)
+    public Book(String ISBN, String title, Date published, BookGenre genre, int rating, Author author, User addedBy)
     {
         this(ISBN, title, published, genre, rating);
         this.addAuthor(author);
+        this.addUser(addedBy);
     }
     
     
@@ -49,7 +52,19 @@ public class Book {
         this(ISBN, title, published, genre, rating);
         this.authors.addAll(authors);
     }
-    
+
+    public void addReviews(List<Review> reviews){
+        this.reviews.addAll(reviews);
+    }
+
+    public void addUser(User addedBy){
+        this.addedBy = addedBy;
+    }
+
+    public User getAddedBy() {
+        return addedBy;
+    }
+
     public void addAuthors(List<Author> authors)
     {
         this.authors.addAll(authors);
@@ -80,10 +95,11 @@ public class Book {
     public ArrayList<Author> getAuthors() {
         return authors;
     }
-    
-    
-    
-//    public Book(String isbn, String title, Date published) {
+
+    public ArrayList<Review> getReviews() {
+        return reviews;
+    }
+    //    public Book(String isbn, String title, Date published) {
 //        this(-1, isbn, title, published); 
 //    }
     
@@ -105,6 +121,6 @@ public class Book {
     @Override
     public String toString() 
     {
-        return "TITLE: " + title + " ISBN: " + ISBN + " DATE: " + this.published.toString() + " GENRE: " + this.genre + " RATING: " + this.rating + " Authors: " + this.authors.toString();
+        return "TITLE: " + title + " ISBN: " + ISBN + " DATE: " + this.published.toString() + " GENRE: " + this.genre + " RATING: " + this.rating + " Authors: " + this.authors.toString() + "Reviews: " + this.reviews.toString();
     }
 }

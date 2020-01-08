@@ -43,6 +43,20 @@ public interface BooksDbInterface {
     //public List<Book> searchBooksbyAuthorID(String ID) throws IOException, SQLException;
 
     public void addAuthorToExistingBook(Author author, String ISBN) throws SQLException;
+
+    public boolean isLoggedIn();
+
+    public User getCurrentUser();
+
+    public boolean loginUser(User user) throws SQLException;
+
+    public boolean verifyAccount(User user) throws  SQLException;
+
+    public void logoutAuthorizedUser() throws SQLException;
+
+    public void addReview(String ISBN, String userText) throws SQLException;
+
+    public void deleteBook(String ISBN) throws SQLException;
     // TODO: Add abstract methods for all inserts, deletes and queries 
     // mentioned in the instructions for the assignement.
 }

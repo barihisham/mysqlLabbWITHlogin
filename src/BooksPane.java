@@ -41,6 +41,8 @@ public class BooksPane extends VBox {
     private Button openAuthorTableButton;
     private Button searchAuthorButton;
     private TextField SearchFieldAuthor;
+    private Button addReviewButton;
+    private Button deleteBookBUtton;
     
     private TableView<Book> booksTable;
     private ObservableList<Book> booksInTable; // the data backing the table view
@@ -50,7 +52,9 @@ public class BooksPane extends VBox {
 
     private MenuBar menuBar;
     private AddBookDialog dialog;
+    private final LoginDialog loginDialog;
     private final Controller controller;
+    ObservableList<TablePosition> selectedCells;
 
     public AddBookDialog getDialog() {
         return dialog;
@@ -61,7 +65,8 @@ public class BooksPane extends VBox {
         //dialog = new AddBookDialog();
         controller = new Controller(booksDb, this);
         this.init(controller);
-        dialog = new AddBookDialog(this.controller);
+        dialog = new AddBookDialog(booksDb);
+        loginDialog = new LoginDialog(controller);
     }
 
     /**
@@ -113,7 +118,7 @@ public class BooksPane extends VBox {
         FlowPane bottomPane = new FlowPane();
         bottomPane.setHgap(10);
         bottomPane.setPadding(new Insets(10, 10, 10, 10));
-        bottomPane.getChildren().addAll(searchModeBox, searchField, searchButton, openAuthorTableButton);
+        bottomPane.getChildren().addAll(searchModeBox, searchField, searchButton, openAuthorTableButton, addReviewButton, deleteBookBUtton);
         BorderPane mainPane = new BorderPane();
         mainPane.setCenter(booksTable);
         mainPane.setBottom(bottomPane);
@@ -125,8 +130,7 @@ public class BooksPane extends VBox {
 
     
     
-    private void initAuthorsTable()
-    {
+    private void initAuthorsTable() {
         authorsTable = new TableView<>();
         authorsTable.setEditable(false);
         
@@ -148,19 +152,8 @@ public class BooksPane extends VBox {
         //booksTable.setEditable(false); // don't allow user updates (yet)
         // define columns
         booksTable.setEditable(true);
-        booksTable.getSelectionModel().setCellSelectionEnabled(true);
-        ObservableList<TablePosition> selectedCells = booksTable.getSelectionModel().getSelectedCells() ;
-/*        selectedCells.addListener((ListChangeListener.Change<? extends TablePosition> change) -> {
-            if (selectedCells.size() > 0) {
-                TablePosition selectedCell = selectedCells.get(0);
-                System.out.println(selectedCell.getColumn());
-                TableColumn column = selectedCell.getTableColumn();
-                int rowIndex = selectedCell.getRow();
-
-                System.out.println(column.getCellObservableValue(rowIndex).getValue());
-                Object data = column.getCellObservableValue(rowIndex).getValue();
-            }
-        });*/
+        //booksTable.getSelectionModel().setCellSelectionEnabled(true);
+        selectedCells = booksTable.getSelectionModel().getSelectedCells() ;
         booksTable.setOnMouseClicked(event -> {
             if(event.getClickCount() == 2 && !selectedCells.isEmpty()){
                 TablePosition selectedCell = selectedCells.get(0);
@@ -174,6 +167,9 @@ public class BooksPane extends VBox {
             }
         });
 
+
+
+
         TableColumn<Book, String> titleCol = new TableColumn<>("Title");
         TableColumn<Book, String> isbnCol = new TableColumn<>("ISBN");
         TableColumn<Book, Date> publishedCol = new TableColumn<>("Published");
@@ -181,8 +177,10 @@ public class BooksPane extends VBox {
         TableColumn<Book, Integer> ratingCol = new TableColumn<>("Rating");
         TableColumn<Book, BookGenre> genreCol = new TableColumn<>("Genre");
         TableColumn<Book, Author> authorCol = new TableColumn<>("Author(s)");
+        TableColumn<Book, User> addedByCol = new TableColumn<>("Added by");
+        TableColumn<Book, Review> reviewCol = new TableColumn<>("Review(s)");
 
-        booksTable.getColumns().addAll(titleCol, isbnCol, publishedCol,ratingCol, genreCol, authorCol);
+        booksTable.getColumns().addAll(titleCol, isbnCol, publishedCol,ratingCol, genreCol, authorCol, addedByCol, reviewCol);
 
 
         // give title column some extra space
@@ -196,42 +194,8 @@ public class BooksPane extends VBox {
         ratingCol.setCellValueFactory(new PropertyValueFactory<>("rating"));
         genreCol.setCellValueFactory(new PropertyValueFactory<>("genre"));
         authorCol.setCellValueFactory(new PropertyValueFactory<>("authors"));
-
-/*        isbnCol.setCellFactory(e -> {
-            TableCell<Book, String> cell = new TableCell<Book, String>() {
-                @Override
-                protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty) ;
-                    setText(empty ? null : item);
-                }
-            };
-            cell.setOnMouseClicked(event-> {
-                if(event.getClickCount() == 2 && !cell.isEmpty()){
-                    String ISBN = cell.getItem();
-                    this.controller.handleAddAuthorExistingBook(ISBN);
-                }
-            });
-
-            return cell;
-        });*/
-/*        isbnCol.setCellFactory(e -> {
-            TableCell<Book, String> cell = new TableCell<Book, String>() {
-                @Override
-                protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty) ;
-                    setText(empty ? null : item);
-                }
-            };
-            cell.setOnMouseClicked(event-> {
-                if(event.getClickCount() == 2 && !cell.isEmpty()){
-                    String ISBN = cell.getItem();
-                    this.controller.handleAddAuthorExistingBook(ISBN);
-                }
-            });
-
-            return cell;
-        });*/
-
+        addedByCol.setCellValueFactory(new PropertyValueFactory<>("addedBy"));
+        reviewCol.setCellValueFactory(new PropertyValueFactory<>("reviews"));
         // associate the table view with the data
         booksTable.setItems(booksInTable);
     }
@@ -253,9 +217,39 @@ public class BooksPane extends VBox {
                 controller.onSearchSelected(searchFor, mode);
             }
         });
-        
+
+        addReviewButton = new Button("Add review");
+        addReviewButton.setOnAction(e-> {
+            if(!selectedCells.isEmpty()) {
+                TablePosition selectedCell = selectedCells.get(0);
+                TableColumn column = selectedCell.getTableColumn();
+                int rowIndex = selectedCell.getRow();
+                rowIndex = selectedCell.getRow();
+                System.out.println(booksTable.getItems().get(selectedCell.getRow()).getISBN());
+                controller.handleAddReview(booksTable.getItems().get(selectedCell.getRow()).getISBN());
+            }else{
+                controller.handleWrongInput("You must select a book");
+                e.consume();
+            }
+        });
+
+        deleteBookBUtton = new Button("Delete book");
+        deleteBookBUtton.setOnAction(e-> {
+            if(!selectedCells.isEmpty()) {
+                TablePosition selectedCell = selectedCells.get(0);
+                TableColumn column = selectedCell.getTableColumn();
+                int rowIndex = selectedCell.getRow();
+                rowIndex = selectedCell.getRow();
+                System.out.println(booksTable.getItems().get(selectedCell.getRow()).getISBN());
+                controller.handleDeleteBook(booksTable.getItems().get(selectedCell.getRow()).getISBN());
+            }else{
+                controller.handleWrongInput("You must select a book");
+                e.consume();
+            }
+        });
+
     }
-    
+
     private void initAuthorSearchView(Controller controller)
     {
         SearchFieldAuthor = new TextField();
@@ -271,8 +265,11 @@ public class BooksPane extends VBox {
         controller.onSearchSelectedAuthor(SearchFor, mode);
         
         });
+
         openAuthorTableButton = new Button("Search Author");
         openAuthorTableButton.setOnAction(e-> {this.authorTable();});
+
+
     }
 
 
@@ -282,7 +279,11 @@ public class BooksPane extends VBox {
         MenuItem exitItem = new MenuItem("Exit");
         MenuItem connectItem = new MenuItem("Connect to Db");
         MenuItem disconnectItem = new MenuItem("Disconnect");
-        fileMenu.getItems().addAll(exitItem, connectItem, disconnectItem);
+        MenuItem loginItem = new MenuItem("Login");
+        MenuItem logoutItem = new MenuItem("Logout");
+        loginItem.setOnAction(e-> this.controller.handleLogin());
+        logoutItem.setOnAction(e-> this.controller.handleLogoutAuthorizedUser());
+        fileMenu.getItems().addAll(exitItem, connectItem, disconnectItem, loginItem, logoutItem);
 
         Menu searchMenu = new Menu("Search");
         MenuItem titleItem = new MenuItem("Title");
@@ -298,8 +299,7 @@ public class BooksPane extends VBox {
         MenuItem removeItem = new MenuItem("Remove");
         MenuItem updateItem = new MenuItem("Update");
         
-        addItem.setOnAction(e -> {this.controller.handleAddBookToDb();
-});
+        addItem.setOnAction(e -> this.controller.handleAddBookToDb());
         
         manageMenu.getItems().addAll(addItem, removeItem, updateItem);
 

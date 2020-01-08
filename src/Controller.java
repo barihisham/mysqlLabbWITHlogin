@@ -3,12 +3,12 @@
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.Callable;
+
 import javafx.application.Platform;
+import javafx.event.Event;
 
 import static javafx.scene.control.Alert.AlertType.*;
 
@@ -22,10 +22,14 @@ public class Controller{
 
     private final BooksPane booksView; // view
     private final BooksDbInterface booksDb; // model
+    private final LoginDialog loginDialog;
+    private final ReviewDialog reviewDialog;
 
     public Controller(BooksDbInterface booksDb, BooksPane booksView) {
         this.booksDb = booksDb;
         this.booksView = booksView;
+        this.loginDialog = new LoginDialog(this);
+        this.reviewDialog = new ReviewDialog();
     }
 
     protected void onSearchSelected(String searchFor, SearchMode mode) 
@@ -57,37 +61,27 @@ public class Controller{
                             case Genre:
                                 result = booksDb.searchBooksByGenre(searchFor);
                                 break;
-//                            case ID: 
-//                                System.out.println("Confirm id");
-//                                result = booksDb.searchBooksbyAuthorID(searchFor);
-//                                System.out.println("finish id");
-//                                break;
                             default:
                         }
-                        if (result == null || result.isEmpty()) 
-                        {
-                            Platform.runLater(new Runnable() 
-                            {
+                        if (result == null || result.isEmpty()) {
+                            Platform.runLater(new Runnable() {
                                 @Override
-                                public void run() 
-                                {
+                                public void run() {
                                     booksView.showAlertAndWait("No results found.", INFORMATION);
                                 }
                             });
                         } 
-                        else 
-                        {
+                        else {
                             final List<Book> finalRes = result;
                             // kan skrivas såhär också
                             Platform.runLater(() -> { booksView.displayBooks(finalRes);});
                         }
                     } 
-                    else 
-                    {
+                    else {
                         Platform.runLater(() -> { booksView.showAlertAndWait("Enter a search string!", WARNING);});
                     }
-                    } catch (IOException | SQLException e) 
-                    {
+                    } catch (IOException | SQLException e) {
+                        e.printStackTrace();
                         Platform.runLater(() -> { booksView.showAlertAndWait("Database error.",ERROR);});
                     }
                 }
@@ -103,11 +97,9 @@ public class Controller{
             public void run()
             {
                 try {
-                    if (searchFor != null && searchFor.length() > 0) 
-                    {
+                    if (searchFor != null && searchFor.length() > 0) {
                         List<Author> result = null;
-                        switch (mode) 
-                        {
+                        switch (mode) {
                             case ID:
                                 result = booksDb.searchAuthorById(searchFor);
                                 break;
@@ -116,30 +108,24 @@ public class Controller{
                                 break;
                             default:
                         }
-                        if (result == null || result.isEmpty()) 
-                        {
-                            Platform.runLater(new Runnable() 
-                            {
+                        if (result == null || result.isEmpty()) {
+                            Platform.runLater(new Runnable() {
                                 @Override
-                                public void run() 
-                                {
+                                public void run() {
                                     booksView.showAlertAndWait("No results found.", INFORMATION);
                                 }
                             });
                         } 
-                        else 
-                        {
+                        else {
                             final List<Author> finalRes = result;
                             // kan skrivas såhär också
                             Platform.runLater(() -> { booksView.displayAuthors(finalRes);});
                         }
                     } 
-                    else 
-                    {
+                    else {
                         Platform.runLater(() -> { booksView.showAlertAndWait("Enter a search string!", WARNING);});
                     }
-                    } catch (IOException | SQLException e) 
-                    {
+                    } catch (IOException | SQLException e) {
                         Platform.runLater(() -> { booksView.showAlertAndWait("Database error.",ERROR);});
                     }
                 }
@@ -148,92 +134,180 @@ public class Controller{
     
     
     protected void handleAddAuthorExistingBook(String ISBN){
-        Optional<Author> result = booksView.getDialog().getAuthorDialog().showAndWait();
-        new Thread()
-        {
-            @Override
-            public void run()
-            {
-                if(result.isPresent()) {
-                    try {
-                        booksDb.addAuthorToExistingBook(result.get(), ISBN);
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Author added!", INFORMATION);});
-                    }
-                    catch(java.sql.SQLIntegrityConstraintViolationException e) {
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Author(ID) already exist in book", WARNING);});
-                    }
-                    catch (SQLException e) {
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Database error.",ERROR);});
+
+        if(!(booksDb.getCurrentUser() == null)) {
+            Optional<Author> result = booksView.getDialog().getAuthorDialog().showAndWait();
+            new Thread() {
+                @Override
+                public void run() {
+                    if (result.isPresent()) {
+                        try {
+                            booksDb.addAuthorToExistingBook(result.get(), ISBN);
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("Author added!", INFORMATION);
+                            });
+                        } catch (java.sql.SQLIntegrityConstraintViolationException e) {
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("Author(ID) already exist in book", WARNING);
+                            });
+                        } catch (java.sql.SQLSyntaxErrorException e) {
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+                            });
+                        } catch (SQLException e) {
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("Database error.", ERROR);
+                            });
+                        }
                     }
                 }
-            }
-        }.start();
+            }.start();
+        }else{
+            booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+        }
     }
     
     
     protected void handleAddBookToDb()
     {
         // lägg till tråd
-        
-        
-        Optional<Book> result = booksView.getDialog().showAndWait();
-        
-        
-//        if(result.isPresent()) 
-//        {
-//            try
-//            {
-//                 booksDb.addBookToDb(result.get());
-//            }
-//            catch(java.sql.SQLIntegrityConstraintViolationException e)
-//            {
-//                booksView.showAlertAndWait("Book already exist in databas", WARNING);
-//            }
-//
-//            System.out.println(result.get().toString());
-//            //booksView.showAlertAndWait("Book added!", NONE);
-//        } 
-//        else 
-//        {
-//            booksView.showAlertAndWait("Canceled", WARNING);
-//        }
-        
-        
-        
-        new Thread()
-        {
-            @Override
-            public void run()
-            {
-                if(result.isPresent())
-                {
-                    try 
-                    {
-                        booksDb.addBookToDb(result.get());
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Book added!", INFORMATION);});
-                    } 
-                    catch(java.sql.SQLIntegrityConstraintViolationException e)
-                    {
-                        System.out.println("HHERERESDFASDF");
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Book already exist in databas", WARNING);});
+        if(booksDb.isLoggedIn()) {
+            Optional<Book> result = booksView.getDialog().showAndWait();
+            new Thread() {
+                @Override
+                public void run() {
+                    if (result.isPresent()) {
+                        try {
+                            booksDb.addBookToDb(result.get());
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("Book added!", INFORMATION);
+                            });
+                        } catch (java.sql.SQLIntegrityConstraintViolationException e) {
+                            Platform.runLater(() -> { booksView.showAlertAndWait("Book already exist in database", INFORMATION); });
+                        } catch (java.sql.SQLSyntaxErrorException e) {
+                            Platform.runLater(() -> {
+                                booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+                            });
+                        } catch (IOException | SQLException e) {
+                            e.printStackTrace();
+                            Platform.runLater(() -> { booksView.showAlertAndWait("Database error.", ERROR); });
+                        }
                     }
-                    catch (IOException | SQLException e) 
-                    {
-                        Platform.runLater(() -> { booksView.showAlertAndWait("Database error.",ERROR);});
+                }
+            }.start();
+        }else{
+            booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+        }
+        
+    }
+
+
+    protected void handleLogoutAuthorizedUser(){
+        try {
+            booksDb.logoutAuthorizedUser();
+        } catch (SQLException e) {
+            booksView.showAlertAndWait("Database error", WARNING);
+        }
+    }
+
+    protected boolean handleVerifyAccountExist(User user, Event event){
+        boolean accountExist = false;
+        try {
+             accountExist = new Callable<Boolean>(){
+                @Override
+                public Boolean call() throws Exception {
+                    try {
+                        if(!booksDb.verifyAccount(user)){
+                            //event.consume();
+                            Platform.runLater(()-> booksView.showAlertAndWait("Wrong username/password", WARNING));
+                            return false;
+                        }
+                        else{
+                            return true;
+                        }
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                        Platform.runLater(() -> { booksView.showAlertAndWait("Database error.", ERROR);});
+                    }
+                    return true;
+                }
+            }.call();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Platform.runLater(() -> {booksView.showAlertAndWait("Database error.", ERROR);});
+        }
+        return accountExist;
+    }
+
+    protected void handleLogin(){
+        Optional<User> result = this.loginDialog.showAndWait();
+        new Thread(){
+            @Override
+            public void run(){
+                if(result.isPresent()){
+                    try {
+                        booksDb.loginUser(result.get());
+                    } catch (SQLException e) {
+                        e.printStackTrace();
                     }
                 }
             }
         }.start();
-        
-        
-        
+
     }
-    
-    
-    
-    
-    
-    
+
+    protected void handleAddReview(String ISBN){
+        if(booksDb.isLoggedIn()) {
+            Optional<String> result = this.reviewDialog.showAndWait();
+            new Thread() {
+                @Override
+                public void run() {
+                    if (result.isPresent()) {
+                        try {
+                            booksDb.addReview(ISBN, result.get());
+
+                        } catch(java.sql.SQLIntegrityConstraintViolationException e){
+                            Platform.runLater(()-> booksView.showAlertAndWait("You have already written a review", WARNING));
+                        }
+                        catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                    } else {
+                        Platform.runLater(()-> booksView.showAlertAndWait("You must enter text", WARNING));
+                    }
+                }
+            }.start();
+        }else{
+            booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+        }
+    }
+
+    protected void handleWrongInput(String wrongInputText){
+        booksView.showAlertAndWait(wrongInputText, WARNING);
+    }
+
+
+    protected void handleDeleteBook(String ISBN){
+       if(booksDb.isLoggedIn()) {
+           new Thread() {
+               @Override
+               public void run() {
+                   try {
+                       booksDb.deleteBook(ISBN);
+                       Platform.runLater(()-> booksView.showAlertAndWait("Book deleted!", INFORMATION));
+                   } catch (SQLException e) {
+                       e.printStackTrace();
+                   }
+               }
+           }.start();
+       }
+       else{
+           booksView.showAlertAndWait("You must be logged in to access this functionality", INFORMATION);
+       }
+    }
+
+
+
 
     // TODO:
     // Add methods for all types of user interaction (e.g. via  menus).

@@ -29,14 +29,11 @@ public class AddAuthorDialog extends Dialog<Author>{
     
     private final TextField firstNameField = new TextField("lastNmaelabla");
     private final TextField lastNameField = new TextField("fistNameblabla");
-    private final TextField dobField = new TextField("1999-10-24");
     private final DatePicker dobPicker = new DatePicker();
     private final TextField authorIdField = new TextField();
 
     
-    public AddAuthorDialog()
-    {
-
+    public AddAuthorDialog() {
         initDialog();
     }
     
@@ -74,8 +71,7 @@ public class AddAuthorDialog extends Dialog<Author>{
                 Author authorResult = null;
                 if (b == buttonTypeOk) 
                 {
-                    if (isValidData()) 
-                    {
+                    if (isValidData()) {
                         authorResult = new Author(Integer.parseInt(authorIdField.getText()), firstNameField.getText(), lastNameField.getText(), Date.valueOf(dobPicker.getValue()));
                     }
                 }

@@ -11,12 +11,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Calendar;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * A mock implementation of the BooksDBInterface interface to demonstrate how to
@@ -32,49 +29,64 @@ public class BooksDb implements BooksDbInterface {
     private Connection myConn;
     private PreparedStatement qStmt;
     private ResultSet qResult;
-    PreparedStatement getAuthorsStmt;
-    ResultSet authorRs;
+    private PreparedStatement getAuthorsStmt;
+    private ResultSet authorRs;
+    private PreparedStatement reviewStmt;
+    private ResultSet reviewRs;
+    private boolean loggedIn;
+    private User currentUser;
     public BooksDb() 
     {
         //books = Arrays.asList(DATA);
-        myConn = null;
-        qStmt = null;
-        qResult = null;
+        this.myConn = null;
+        this.qStmt = null;
+        this.qResult = null;
+        this.loggedIn = false;
+        this.currentUser = null;
     }
 
     @Override
-    public boolean connect(String database) throws SQLException
-    {
+    public boolean connect(String database) throws SQLException {
         database = "sakila";
         String server
                 = "jdbc:mysql://localhost:3306/" + database
                 + "?UseClientEnc=UTF8";
-        String user = "myuser";
-        String password = "mypassword";
+        String user = "publicUser";
+        String password = "publicPassword";
         myConn = DriverManager.getConnection(server, user, password);
         return myConn == null;
     }
 
     @Override
-    public void disconnect() throws IOException, SQLException 
-    {
-        if(myConn != null)
-        {
-            try 
-            {
+    public void disconnect() throws IOException, SQLException {
+        if(myConn != null) {
                 myConn.close();
-            } catch (SQLException ex) 
-            {
-                System.out.println("wat");
-            }
         }
         qStmt.close();
         qResult.close();
     }
 
+    private void loginAuthorizedUser() throws SQLException {
+        String database = "sakila";
+        String server
+                = "jdbc:mysql://localhost:3306/" + database
+                + "?UseClientEnc=UTF8";
+        String user = "authorizedUser";
+        String password = "password";
+        myConn = DriverManager.getConnection(server, user, password);
+    }
+
     @Override
-    public List<Book> searchBooksByTitle(String searchTitle) throws IOException, SQLException  
-    {
+    public void logoutAuthorizedUser() throws SQLException {
+        this.loggedIn = false;
+        this.currentUser = null;
+        this.connect("changeThis");
+    }
+
+
+
+    @Override
+    public List<Book> searchBooksByTitle(String searchTitle) throws IOException, SQLException {
 
         String sql = "SELECT * FROM T_Book WHERE title LIKE ?";
         qStmt = myConn.prepareStatement(sql);
@@ -120,13 +132,16 @@ public class BooksDb implements BooksDbInterface {
     
     private List<Book> getResultBook(ResultSet qResult) throws SQLException
     {
-        String sql;
-        List<Book> result = new ArrayList<>();
+
+
+        String sqlQuery;
+        List<Book> booksResult = new ArrayList<>();
         
          while(this.qResult.next())
-        {   
-            sql = "SELECT* FROM T_Author WHERE T_Author.authorID IN ( SELECT authorID FROM T_Book_Author WHERE T_Book_Author.ISBN = ?)";
-            getAuthorsStmt = myConn.prepareStatement(sql);
+        {
+            //get authors
+            sqlQuery = "SELECT* FROM T_Author WHERE T_Author.authorID IN ( SELECT authorID FROM T_Book_Author WHERE T_Book_Author.ISBN = ?)";
+            getAuthorsStmt = myConn.prepareStatement(sqlQuery);
             getAuthorsStmt.setString(1, qResult.getString("ISBN"));
             authorRs = getAuthorsStmt.executeQuery();
             List<Author> authors = new ArrayList<>();
@@ -135,18 +150,34 @@ public class BooksDb implements BooksDbInterface {
                 Author author = new Author(authorRs.getInt("authorID"),
                         authorRs.getString("firstName"), authorRs.getString("lastName"),
                         authorRs.getDate("dob"));
+                author.addAddedBy(new User(authorRs.getString("addedBy"), "UNKNOWN"));
                 authors.add(author);
             }
+
+            List<Review> reviewsResult = new ArrayList<>();
+            sqlQuery = "SELECT * FROM T_Review WHERE T_Review.ISBN = ?";
+            reviewStmt = myConn.prepareStatement(sqlQuery);
+            reviewStmt.setString(1, qResult.getString("ISBN"));
+            reviewRs = reviewStmt.executeQuery();
+            while(reviewRs.next()){
+                Review review = new Review(reviewRs.getString("userText"),
+                        reviewRs.getDate("reviewDate"),
+                        new User(reviewRs.getString("username"), "UNKNOWN"));
+                reviewsResult.add(review);
+            }
+
+            //get book
             Book b = new Book(qResult.getString("ISBN"),
                     qResult.getString("title"),
                     qResult.getDate("dateCreated"),
                     BookGenre.valueOf(qResult.getString("genre")),
                     qResult.getInt("rating"), authors);
+                    b.addUser(new User(qResult.getString("addedBy"), "UNKNOWN"));
+                    b.addReviews(reviewsResult);
             System.out.println(b.toString()+ " FROM BOOK RESULT");
-            result.add(b);
+            booksResult.add(b);
         }
-         return result;
-         
+         return booksResult;
     }
     
     @Override
@@ -190,12 +221,13 @@ public class BooksDb implements BooksDbInterface {
         myConn.setAutoCommit(false);
         this.addAuthorToDbIfNotExist(book.getAuthors());
         
-        qStmt = myConn.prepareStatement("INSERT INTO T_Book(ISBN, genre, title, dateCreated, rating) VALUES(?, ?, ?, ?, ?)");
+        qStmt = myConn.prepareStatement("INSERT INTO T_Book(ISBN, genre, title, dateCreated, rating, addedBy) VALUES(?, ?, ?, ?, ?, ?)");
         qStmt.setString(1,book.getISBN());
         qStmt.setString(2,book.getGenre().name());
         qStmt.setString(3,book.getTitle());
         qStmt.setString(4,book.getPublished().toString());
         qStmt.setInt(5, book.getRating());
+        qStmt.setString(6, this.currentUser.getUsername());
         qStmt.executeUpdate();
         
         for(int i = 0; i < book.getAuthors().size(); i++)
@@ -212,7 +244,27 @@ public class BooksDb implements BooksDbInterface {
         
         return true; // ?
     }
-    
+
+    @Override
+    public void addReview(String ISBN, String userText) throws SQLException {
+        qStmt = myConn.prepareStatement("INSERT INTO T_Review(ISBN, username, reviewDate, userText) VALUES(?, ?, ?, ?)");
+        qStmt.setString(1, ISBN);
+        qStmt.setString(2, this.currentUser.getUsername());
+        qStmt.setDate(3, new Date(Calendar.getInstance().getTime().getTime()));
+        qStmt.setString(4, userText);
+        qStmt.executeUpdate();
+        System.out.println("updated?");
+    }
+
+    @Override
+    public void deleteBook(String ISBN) throws SQLException {
+        qStmt = myConn.prepareStatement("DELETE FROM T_Book WHERE T_Book.ISBN = ?");
+        qStmt.setString(1, ISBN);
+        qStmt.executeUpdate();
+    }
+
+
+
     private void addAuthorToDbIfNotExist(ArrayList<Author> authors) throws SQLException
     {
         qStmt = myConn.prepareStatement("SELECT * FROM T_Author WHERE authorID = ?");
@@ -225,41 +277,22 @@ public class BooksDb implements BooksDbInterface {
             this.qResult = qStmt.executeQuery();
             if(!this.qResult.next())
             {
-                aStmt = myConn.prepareStatement("INSERT INTO T_Author(authorID, firstName, lastName, dob) VALUES(?, ?, ?, ?)");
+                aStmt = myConn.prepareStatement("INSERT INTO T_Author(authorID, firstName, lastName, dob, addedBy) VALUES(?, ?, ?, ?, ?)");
                 aStmt.setInt(1,authors.get(i).getAuthorID());
                 aStmt.setString(2,authors.get(i).getFirstName());
                 aStmt.setString(3, authors.get(i).getLastName());
                 aStmt.setString(4,authors.get(i).getDob().toString());
+                aStmt.setString(5, this.currentUser.getUsername());
                 aStmt.executeUpdate();
                 
                 System.out.println(authors.get(i).getFirstName());
                 System.out.println(authors.get(i).getLastName());
                 System.out.println(authors.get(i).getDob().toString());
+                System.out.println(this.currentUser.getUsername());
             }
         }
         
     }
-//   @Override
-//    public List<Book> searchBooksbyAuthorID(String ID) throws IOException, SQLException{
-//        String sql = "SELECT * FROM T_Book_Author WHERE authorID = ?";
-//        System.out.println("here");
-//        qStmt = myConn.prepareStatement(sql);
-//        qStmt.setInt(1, Integer.parseInt(ID));
-//        this.qResult = qStmt.executeQuery();
-//        
-//        //return this.getResultBook(qResult);
-//        
-//        
-//        
-//        while(qResult.next())
-//        {
-//            Author author = new Author(qResult.getInt("authorID"), qResult.getString("firstName"), qResult.getString("lastName"), qResult.getDate("dob"));
-//        }
-//        
-//        sql = "SELECT * FROM T_Book_Author WHERE authorID = ?";
-//        
-//       
-//    }
     
     @Override
     public boolean isBookInDb(String ISBN)throws IOException, SQLException
@@ -276,11 +309,6 @@ public class BooksDb implements BooksDbInterface {
         }
         return count > 0;
     }
-    
-    public boolean isAuthoInDb()
-    {
-                 return true;
-    }
 
     @Override
     public List<Author> searchAuthorById(String ID) throws IOException, SQLException 
@@ -292,8 +320,7 @@ public class BooksDb implements BooksDbInterface {
         
         List<Author> authors = new ArrayList<>();
         
-        while(qResult.next())
-        {
+        while(qResult.next()) {
             Author a = new Author(qResult.getInt("authorID"), qResult.getString("firstName"), qResult.getString("lastName"), qResult.getDate("dob"));
             System.out.println(qResult.getInt("authorID"));
             System.out.println(qResult.getString("firstName"));
@@ -322,9 +349,54 @@ public class BooksDb implements BooksDbInterface {
         }
         return authors;
     }
-    
-    
 
-    
-    
+    @Override
+    public boolean loginUser(User user) throws SQLException {
+
+        String query = "SELECT * FROM T_User WHERE username = ? AND psw = ?";
+        qStmt = myConn.prepareStatement(query);
+        qStmt.setString(1, user.getUsername());
+        qStmt.setString(2, user.getPassword());
+        qStmt.execute();
+        qResult = qStmt.getResultSet();
+
+        if(qResult.next()){
+            currentUser = new User(qResult.getString("username"), qResult.getString("psw"));
+            loggedIn = true;
+            System.out.println("wtf");
+            System.out.println(currentUser.toString());
+            this.loginAuthorizedUser();
+            return true;
+        }
+        return false;
+    }
+
+
+
+
+    @Override
+    public boolean verifyAccount(User user) throws SQLException {
+        String query = "SELECT * FROM T_User WHERE username = ? AND psw = ?";
+        qStmt = myConn.prepareStatement(query);
+        qStmt.setString(1, user.getUsername());
+        qStmt.setString(2, user.getPassword());
+        qStmt.execute();
+        qResult = qStmt.getResultSet();
+        return qResult.next();
+    }
+
+
+    @Override
+    public boolean isLoggedIn(){
+        return this.loggedIn;
+    }
+
+    @Override
+    public User getCurrentUser() {
+        return currentUser;
+    }
+
+
+
+
 }
